@@ -159,6 +159,12 @@ class RmsOrderAPI(ZeepClient):
         return self._send_request('updateOrder', **request)
 
 
+class RPayOrderAPI(RestClient):
+    api_version = '2.0'
+    api_endpoint = 'order'
+    search_order = RestMethod(http_method='POST', name='searchOrder', _type="JSON")
+    get_order = RestMethod(http_method='POST', name='getOrder', _type="JSON")
+
 class RmsProductAPI(RestClient):
     api_version = '2.0'
     search = RestMethod(http_method='GET')
@@ -217,6 +223,7 @@ class RmsService(BaseRmsService):
     cabinet = RmsCabinetAPI()
     navigation = RmsNavigationAPI()
     category = RmsCategoryAPI()
+    rpay = RPayOrderAPI()
 
     order = RmsOrderAPI()
     inventory = RmsInventoryAPI()

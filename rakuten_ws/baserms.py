@@ -18,6 +18,7 @@ import zeep.transports
 
 from lxml import etree
 from requests import Request
+from datetime import datetime
 
 from rakuten_ws.utils import xml2dict, dict2xml, unflatten_dict, sorted_dict, flatten_dict
 
@@ -25,6 +26,11 @@ from .utils import camelize_dict, PrettyStringRepr, load_file
 from .compat import to_unicode
 
 
+def support_datetime_serialize(o):
+    if isinstance(o, datetime):
+        return o.strftime('%Y-%m-%dT%H:%M:%S%z')
+    raise TypeError(repr(o) + " is not JSON serializable")
+                
 class RmsServiceClient(object):
     def __get__(self, service, cls):
         if service is not None:
@@ -84,17 +90,27 @@ class RestMethodResult(OrderedDict):
         super(RestMethodResult, self).__init__(result_data)
 
     def parse_result(self, response):
-        xml = etree.fromstring(response.content)
-        _status = xml.xpath('//status')
-        _result = xml.xpath('//%s' % self.method.result_xml_key)
-        result_data = {}
-        if _status:
-            status = xml2dict(etree.tostring(_status[0]))
+        if response.headers['content-type'] == 'application/json':
+            j = json.loads(response.content.decode('utf-8'))
+            if 'MessageModelList' in j and len(j) > 0:
+                s = j['MessageModelList'][0]
+                s['systemStatus'] = s['messageType']
+                return s, j
+            s = {}
+            s['systemStatus'] = 'OK'
+            return s, j
         else:
-            raise RMSInvalidResponse(response.text)
-        if _result:
-            result_data = xml2dict(etree.tostring(_result[0]))
-        return status, result_data
+            xml = etree.fromstring(response.content)
+            _status = xml.xpath('//status')
+            _result = xml.xpath('//%s' % self.method.result_xml_key)
+            result_data = {}
+            if _status:
+                status = xml2dict(etree.tostring(_status[0]))
+            else:
+                raise RMSInvalidResponse(response.text)
+            if _result:
+                result_data = xml2dict(etree.tostring(_result[0]))
+            return status, result_data
 
     @property
     def xml(self):
@@ -106,13 +122,19 @@ class RestMethodResult(OrderedDict):
         return PrettyStringRepr(json.dumps(data, ensure_ascii=False, sort_keys=True,
                                            indent=4, separators=(',', ': ')))
 
+    @property
+    def json_raw(self):
+        data = self
+        return PrettyStringRepr(json.dumps(data, ensure_ascii=False, sort_keys=True,
+                                           indent=4, separators=(',', ': ')))
+
     def __repr__(self):
         return "<RestMethodResult [%s]>" % self.status.get('systemStatus', 'Error')
 
 
 class RestMethod(object):
 
-    def __init__(self, name=None, http_method="GET", params=[], custom_headers={}, form_data=None, root_xml_key=None):
+    def __init__(self, name=None, http_method="GET", params=[], custom_headers={}, form_data=None, root_xml_key=None, _type="XML"):
         self.name = name
         self.http_method = http_method
         self.custom_headers = custom_headers
@@ -120,6 +142,7 @@ class RestMethod(object):
         self.client = None
         self.form_data = form_data
         self._root_xml_key = root_xml_key
+        self._type = _type
 
     @property
     def root_xml_key(self):
@@ -155,7 +178,7 @@ class RestMethod(object):
             sorted_params = camelcase_params
         return dict2xml({self.request_xml_key: sorted_params}, root="request") + "\n"
 
-    def prepare_request(self, params={}):
+    def prepare_request(self, params={}, tp="XML"):
         api_request = furl(self.client.api_url)
         api_request.path.segments.append(self.client.api_version)
         api_request.path.segments.append(self.client.api_endpoint or self.client.name)
@@ -169,7 +192,7 @@ class RestMethod(object):
 
         filename = params.pop('filename', None)
 
-        if self.http_method == "POST":
+        if self.http_method == "POST" and tp == "XML":
             data = self.prepare_xml_post(params)
             if filename:
                 fileobj, mimetype = load_file(filename)
@@ -177,6 +200,10 @@ class RestMethod(object):
                 req = Request(self.http_method, api_request.url, files=files, headers=headers)
             else:
                 req = Request(self.http_method, api_request.url, data=data, headers=headers)
+        elif self.http_method == "POST" and tp == "JSON":
+            data = json.dumps(params, sort_keys=True, default=support_datetime_serialize)
+            headers['Content-Type'] = 'application/json; charset=utf-8'
+            req = Request(self.http_method, api_request.url, data=data, headers=headers)
         else:
             req = Request(self.http_method, api_request.url, headers=headers, params=camelize_dict(params))
 
@@ -185,7 +212,7 @@ class RestMethod(object):
 
     def __call__(self, *args, **kwargs):
         raise_for_status = kwargs.pop('raise_for_status', not self.client.service.webservice.debug)
-        prepped_request = self.prepare_request(kwargs)
+        prepped_request = self.prepare_request(kwargs, self._type)
         response = self.client.service.webservice.session.send(prepped_request)
         if raise_for_status:
             response.raise_for_status()

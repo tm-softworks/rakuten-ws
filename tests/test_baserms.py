@@ -43,10 +43,16 @@ class OrderAPI(RestClient):
     remove = RestMethod(http_method='POST', name='delete')
 
 
+class RPayOrderAPI(RestClient):
+    api_version = '2.0'
+    api_endpoint = 'order'
+    search_order = RestMethod(http_method='POST', name='searchOrder', _type="JSON")
+
 class SimpleRmsService(BaseRmsService):
     item = ItemsAPI()
     product = ProductAPI(name="item_product")
     order = OrderAPI()
+    rpay = RPayOrderAPI()
 
 
 class SimpleWebService(BaseWebService):
@@ -167,6 +173,14 @@ def test_rest_client_post_request():
 """
     assert prepped_request.body == expected_body
 
+    prepped_request = ws.rms.rpay.search_order.prepare_request({"item": "value", "object": {"key": "val"}, "array": [1, 2, 3]}, "JSON")
+    assert prepped_request.url == 'https://api.rms.rakuten.co.jp/es/2.0/order/searchOrder'
+    assert prepped_request.headers['Authorization'] == 'ESA Q0NDQ0M6QkJCQkI='
+    assert prepped_request.headers['Content-Type'] == 'application/json; charset=utf-8'
+    assert 'Authorization' in prepped_request.headers
+    expected_body = """{"array": [1, 2, 3], "item": "value", "object": {"key": "val"}}"""
+    assert prepped_request.body == expected_body
+    print(prepped_request.headers)
 
 def test_rest_client_get_response(httpretty):
 
@@ -226,6 +240,37 @@ def test_rest_client_get_response(httpretty):
 }"""
     assert result.json == expected_json
     assert result.xml == get_xml_response
+
+def test_rest_client_get_response_rpay(httpretty):
+
+    get_xml_response = """{
+    "orderNumberList": [
+        "111-222-333",
+        "111-222-444"
+    ],
+    "status": 200
+}"""
+    ws = SimpleWebService(application_id="AAAAA", license_key="BBBBB", secret_service="CCCCC")
+    httpretty.register_uri(httpretty.POST, 'https://api.rms.rakuten.co.jp/es/2.0/order/searchOrder',
+                           body=get_xml_response,
+                           content_type='application/json')
+
+    args = {'item_url': "aaa"}
+    result = ws.rms.rpay.search_order(**args)
+    print(result.status)
+    assert result['orderNumberList'][0] == '111-222-333'
+    assert result['orderNumberList'][1] == '111-222-444'
+    assert result['status'] == 200
+
+    expected_json = """{
+    "orderNumberList": [
+        "111-222-333",
+        "111-222-444"
+    ],
+    "status": 200
+}"""
+    assert result.json_raw == expected_json
+    #assert result.xml == get_xml_response
 
 
 def test_rest_client_get_404_response(httpretty):
