@@ -253,7 +253,7 @@ def test_rest_client_get_response_rpay(httpretty):
     ws = SimpleWebService(application_id="AAAAA", license_key="BBBBB", secret_service="CCCCC")
     httpretty.register_uri(httpretty.POST, 'https://api.rms.rakuten.co.jp/es/2.0/order/searchOrder',
                            body=get_xml_response,
-                           content_type='application/json')
+                           content_type='application/json; charset=utf-8')
 
     args = {'item_url': "aaa"}
     result = ws.rms.rpay.search_order(**args)

@@ -90,7 +90,7 @@ class RestMethodResult(OrderedDict):
         super(RestMethodResult, self).__init__(result_data)
 
     def parse_result(self, response):
-        if response.headers['content-type'] == 'application/json':
+        if response.headers['content-type'].find('application/json') > -1:
             j = json.loads(response.content.decode('utf-8'))
             if 'MessageModelList' in j and len(j) > 0:
                 s = j['MessageModelList'][0]
