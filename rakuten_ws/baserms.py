@@ -86,7 +86,7 @@ class RestMethodResult(OrderedDict):
         self.method = method
         self.response = response
         self.request = response.request
-        self.status, result_data = self.parse_result(response)
+        self.status, result_data, self.errors = self.parse_result(response)
         super(RestMethodResult, self).__init__(result_data)
 
     def parse_result(self, response):
@@ -95,14 +95,15 @@ class RestMethodResult(OrderedDict):
             if 'MessageModelList' in j and len(j) > 0:
                 s = j['MessageModelList'][0]
                 s['systemStatus'] = s['messageType']
-                return s, j
+                return s, j, None
             s = {}
             s['systemStatus'] = 'OK'
-            return s, j
+            return s, j, None
         else:
             xml = etree.fromstring(response.content)
             _status = xml.xpath('//status')
             _result = xml.xpath('//%s' % self.method.result_xml_key)
+            _errors = xml.xpath('//errorMessages')
             result_data = {}
             if _status:
                 status = xml2dict(etree.tostring(_status[0]))
@@ -110,7 +111,11 @@ class RestMethodResult(OrderedDict):
                 raise RMSInvalidResponse(response.text)
             if _result:
                 result_data = xml2dict(etree.tostring(_result[0]))
-            return status, result_data
+            if _errors:
+                errors = xml2dict(etree.tostring(_errors[0]))
+            else:
+                errors = None
+            return status, result_data, errors
 
     @property
     def xml(self):
@@ -134,7 +139,7 @@ class RestMethodResult(OrderedDict):
 
 class RestMethod(object):
 
-    def __init__(self, name=None, http_method="GET", params=[], custom_headers={}, form_data=None, root_xml_key=None, _type="XML"):
+    def __init__(self, name=None, http_method="GET", params=[], custom_headers={}, form_data=None, root_xml_key=None, _type="XML", result_key=None):
         self.name = name
         self.http_method = http_method
         self.custom_headers = custom_headers
@@ -142,6 +147,7 @@ class RestMethod(object):
         self.client = None
         self.form_data = form_data
         self._root_xml_key = root_xml_key
+        self._result_key = result_key
         self._type = _type
 
     @property
@@ -153,6 +159,8 @@ class RestMethod(object):
 
     @property
     def result_xml_key(self):
+        if self._result_key is not None:
+            return "%sResult" % self._result_key
         return "%sResult" % self.root_xml_key
 
     @property
@@ -193,7 +201,7 @@ class RestMethod(object):
         filename = params.pop('filename', None)
 
         if self.http_method == "POST" and tp == "XML":
-            data = self.prepare_xml_post(params)
+            data = self.prepare_xml_post(params).encode()
             if filename:
                 fileobj, mimetype = load_file(filename)
                 files = {'xml': (None, data), 'file': ('filename', fileobj, mimetype)}

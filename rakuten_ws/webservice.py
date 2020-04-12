@@ -164,6 +164,11 @@ class RPayOrderAPI(RestClient):
     api_endpoint = 'order'
     search_order = RestMethod(http_method='POST', name='searchOrder', _type="JSON")
     get_order = RestMethod(http_method='POST', name='getOrder', _type="JSON")
+    cancel_order = RestMethod(http_method='POST', name='cancelOrder', _type="JSON")
+    confirm_order = RestMethod(http_method='POST', name='confirmOrder', _type="JSON")
+    update_order_shipping_async = RestMethod(http_method='POST', name='updateOrderShippingAsync', _type="JSON")
+    get_result_update_order_shipping_async = RestMethod(http_method='POST', name='getResultUpdateOrderShippingAsync', _type="JSON")
+
 
 class RmsProductAPI(RestClient):
     api_version = '2.0'
@@ -193,7 +198,7 @@ class RmsCabinetAPI(RestClient):
     insert_file = RestMethod(http_method='POST', name='file/insert', form_data='file', root_xml_key="fileInsert",
                              params=parameters.cabinet_insert_file)
     update_file = RestMethod(http_method='POST', name='file/update', form_data='file', root_xml_key="folderUpdate")
-    insert_folder = RestMethod(http_method='POST', name='folder/insert', root_xml_key="folderInsert")
+    insert_folder = RestMethod(http_method='POST', name='folder/insert', root_xml_key="folderInsert", result_key="cabinetFolderInsert")
 
 
 class RmsNavigationAPI(RestClient):
